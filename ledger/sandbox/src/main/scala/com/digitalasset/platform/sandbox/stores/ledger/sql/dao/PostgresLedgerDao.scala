@@ -202,8 +202,10 @@ private class PostgresLedgerDao(
 
       def acsLookupContract(acs: Unit, cid: AbsoluteContractId) =
         lookupActiveContractSync(cid).map(_.toActiveContract)
+
       //TODO: Implement check whether the given contract key exists
       def acsKeyExists(acc: Unit, key: GlobalKey): Boolean = false
+
       //TODO: store contract key
       def acsAddContract(
           acs: Unit,
@@ -211,6 +213,7 @@ private class PostgresLedgerDao(
           c: ActiveContracts.ActiveContract,
           keyO: Option[GlobalKey]): Unit =
         storeContract(offset, Contract.fromActiveContract(cid, c))
+
       //TODO: remove contract key
       def acsRemoveContract(acs: Unit, cid: AbsoluteContractId, keyO: Option[GlobalKey]): Unit = {
         archiveContract(offset, cid)
