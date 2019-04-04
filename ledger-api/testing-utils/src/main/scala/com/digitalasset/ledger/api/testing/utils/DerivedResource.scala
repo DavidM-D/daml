@@ -10,6 +10,7 @@ import scala.reflect.ClassTag
 abstract class DerivedResource[Source, Target: ClassTag](source: Resource[Source])
     extends Resource[(Source, Target)] {
 
+  //TODO: volatile is enough here!
   private val resourceRef = new AtomicReference[Target]()
 
   def derivedValue: Target = {

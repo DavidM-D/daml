@@ -17,6 +17,7 @@ object SandboxServerResource {
   def apply(server: SandboxServer) = new SandboxServerResource(server)
 }
 
+//TODO: this should use the postgresaround somehow..
 class SandboxServerResource(server: SandboxServer) extends Resource[PlatformChannels] {
   @volatile
   private var eventLoopGroup: EventLoopGroup = _

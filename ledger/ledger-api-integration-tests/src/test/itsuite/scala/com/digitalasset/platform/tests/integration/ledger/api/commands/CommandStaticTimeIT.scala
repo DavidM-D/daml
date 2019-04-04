@@ -39,7 +39,7 @@ import scala.concurrent.duration._
     "org.wartremover.warts.Option2Iterable"
   ))
 class CommandStaticTimeIT
-    extends AsyncWordSpec
+  extends AsyncWordSpec
     with Matchers
     with AkkaBeforeAndAfterAll
     with ScalaFutures

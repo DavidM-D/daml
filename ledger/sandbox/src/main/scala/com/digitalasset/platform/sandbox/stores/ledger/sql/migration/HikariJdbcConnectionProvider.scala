@@ -65,7 +65,6 @@ class HikariJdbcConnectionProvider(
   override def runSQL[T](block: Connection => T): T = {
     val conn = shortLivedDataSource.getConnection()
     conn.setAutoCommit(false)
-    conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE)
     try {
       val res = block(conn)
       conn.commit()

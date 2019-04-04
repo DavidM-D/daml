@@ -18,15 +18,8 @@ import com.digitalasset.platform.common.util.DirectExecutionContext
 import com.digitalasset.platform.sandbox.config.LedgerIdGenerator
 import com.digitalasset.platform.sandbox.services.transaction.SandboxEventIdFormatter
 import com.digitalasset.platform.sandbox.stores.ActiveContracts.ActiveContract
-import com.digitalasset.platform.sandbox.stores.ledger.sql.dao.{
-  Contract,
-  LedgerDao,
-  PostgresLedgerDao
-}
-import com.digitalasset.platform.sandbox.stores.ledger.sql.serialisation.{
-  ContractSerializer,
-  TransactionSerializer
-}
+import com.digitalasset.platform.sandbox.stores.ledger.sql.dao.{Contract, LedgerDao, PostgresLedgerDao}
+import com.digitalasset.platform.sandbox.stores.ledger.sql.serialisation.{ContractSerializer, TransactionSerializer}
 import com.digitalasset.platform.sandbox.stores.ledger.sql.util.DbDispatcher
 import com.digitalasset.platform.sandbox.stores.ledger.{Ledger, LedgerEntry, LedgerSnapshot}
 import org.slf4j.LoggerFactory
@@ -37,10 +30,10 @@ import scala.concurrent.{ExecutionContext, Future}
 object SqlLedger {
   //jdbcUrl must have the user/password encoded in form of: "jdbc:postgresql://localhost/test?user=fred&password=secret"
   def apply(
-      jdbcUrl: String,
-      ledgerId: Option[String],
-      timeProvider: TimeProvider,
-      ledgerEntries: immutable.Seq[LedgerEntry])(implicit mat: Materializer): Future[Ledger] = {
+             jdbcUrl: String,
+             ledgerId: Option[String],
+             timeProvider: TimeProvider,
+             ledgerEntries: immutable.Seq[LedgerEntry])(implicit mat: Materializer): Future[Ledger] = {
     implicit val ec: ExecutionContext = DirectExecutionContext
 
     val noOfShortLivedConnections = 10
@@ -58,11 +51,11 @@ object SqlLedger {
 }
 
 private class SqlLedger(
-    val ledgerId: String,
-    headAtInitialization: Long,
-    ledgerDao: LedgerDao,
-    timeProvider: TimeProvider)(implicit mat: Materializer)
-    extends Ledger
+                         val ledgerId: String,
+                         headAtInitialization: Long,
+                         ledgerDao: LedgerDao,
+                         timeProvider: TimeProvider)(implicit mat: Materializer)
+  extends Ledger
     with AutoCloseable {
 
   private val logger = LoggerFactory.getLogger(getClass)
@@ -81,7 +74,7 @@ private class SqlLedger(
   // the reason for modelling persistence as a reactive pipeline is to avoid having race-conditions between the
   // moving ledger-end, the async persistence operation and the dispatcher head notification
   private val persistenceQueue: SourceQueueWithComplete[Long => LedgerEntry] =
-    createPersistenceQueue()
+  createPersistenceQueue()
 
   private def createPersistenceQueue(): SourceQueueWithComplete[Long => LedgerEntry] = {
     val offsetGenerator: Source[Long, NotUsed] =
@@ -131,13 +124,13 @@ private class SqlLedger(
   override def ledgerEnd: Long = headRef
 
   override def snapshot(): Future[LedgerSnapshot] =
-    //TODO (robert): SQL DAO does not know about ActiveContract, this method does a (trivial) mapping from DAO Contract to Ledger ActiveContract. Intended? The DAO layer was introduced its own Contract abstraction so it can also reason read archived ones if it's needed. In hindsight, this might be necessary at all  so we could probably collapse the two
+  //TODO (robert): SQL DAO does not know about ActiveContract, this method does a (trivial) mapping from DAO Contract to Ledger ActiveContract. Intended? The DAO layer was introduced its own Contract abstraction so it can also reason read archived ones if it's needed. In hindsight, this might be necessary at all  so we could probably collapse the two
     ledgerDao.getActiveContractSnapshot
       .map(s => LedgerSnapshot(s.offset, s.acs.map(c => (c.contractId, c.toActiveContract))))(
         DirectExecutionContext)
 
   override def lookupContract(
-      contractId: Value.AbsoluteContractId): Future[Option[ActiveContract]] =
+                               contractId: Value.AbsoluteContractId): Future[Option[ActiveContract]] =
     ledgerDao
       .lookupActiveContract(contractId)
       .map(_.map {
@@ -159,14 +152,15 @@ private class SqlLedger(
         val transactionId = offset.toString
         val toAbsCoid: ContractId => AbsoluteContractId =
           SandboxEventIdFormatter.makeAbsCoid(transactionId)
+
         val mappedTx = tx.transaction
           .mapContractIdAndValue(toAbsCoid, _.mapContractId(toAbsCoid))
-          .mapNodeId(_.index.toString)
+          .mapNodeId(SandboxEventIdFormatter.fromTransactionId(transactionId, _))
 
         val mappedDisclosure = tx.blindingInfo.explicitDisclosure
           .map {
             case (nodeId, party) =>
-              nodeId.index.toString -> party.map(_.underlyingString)
+              SandboxEventIdFormatter.fromTransactionId(transactionId, nodeId) -> party.map(_.underlyingString)
           }
 
         LedgerEntry.Transaction(
@@ -198,7 +192,7 @@ private class SqlLedgerFactory(ledgerDao: LedgerDao) {
     * @return a compliant Ledger implementation
     */
   def createSqlLedger(initialLedgerId: Option[String], timeProvider: TimeProvider)(
-      implicit mat: Materializer): Future[SqlLedger] = {
+    implicit mat: Materializer): Future[SqlLedger] = {
     @SuppressWarnings(Array("org.wartremover.warts.ExplicitImplicitTypes"))
     implicit val ec = DirectExecutionContext
     for {

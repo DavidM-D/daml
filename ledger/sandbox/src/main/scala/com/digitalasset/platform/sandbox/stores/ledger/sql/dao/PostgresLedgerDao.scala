@@ -31,9 +31,11 @@ import com.digitalasset.platform.sandbox.stores.ledger.sql.serialisation.{
 }
 import com.digitalasset.platform.sandbox.stores.ledger.sql.util.DbDispatcher
 import com.google.common.io.ByteStreams
+import org.slf4j.LoggerFactory
 
 import scala.collection.immutable
 import scala.concurrent.Future
+import scala.util.control.NonFatal
 
 private class PostgresLedgerDao(
     dbDispatcher: DbDispatcher,
@@ -41,6 +43,7 @@ private class PostgresLedgerDao(
     transactionSerializer: TransactionSerializer)
     extends LedgerDao {
 
+  private val logger = LoggerFactory.getLogger(getClass)
   private val LedgerIdKey = "LedgerId"
   private val LedgerEndKey = "LedgerEnd"
 
@@ -112,48 +115,53 @@ private class PostgresLedgerDao(
 
   private def storeContracts(offset: Long, contracts: immutable.Seq[Contract])(
       implicit connection: Connection): Unit = {
-    val namedContractParams = contracts
-      .map(
-        c =>
-          Seq[NamedParameter](
-            "id" -> c.contractId.coid,
-            "transaction_id" -> c.transactionId,
-            "workflow_id" -> c.workflowId,
-            "package_id" -> c.coinst.template.packageId.underlyingString,
-            "module_name" -> c.coinst.template.qualifiedName.module.dottedName,
-            "entity_name" -> c.coinst.template.qualifiedName.name.dottedName,
-            "create_offset" -> offset,
-            "contract" -> contractSerializer
-              .serialiseContractInstance(c.coinst)
-              .getOrElse(sys.error(s"failed to serialise contract! cid:${c.contractId.coid}"))
+
+    if (!contracts.isEmpty) {
+      val namedContractParams = contracts
+        .map(
+          c =>
+            Seq[NamedParameter](
+              "id" -> c.contractId.coid,
+              "transaction_id" -> c.transactionId,
+              "workflow_id" -> c.workflowId,
+              "package_id" -> c.coinst.template.packageId.underlyingString,
+              "module_name" -> c.coinst.template.qualifiedName.module.dottedName,
+              "entity_name" -> c.coinst.template.qualifiedName.name.dottedName,
+              "create_offset" -> offset,
+              "contract" -> contractSerializer
+                .serialiseContractInstance(c.coinst)
+                .getOrElse(sys.error(s"failed to serialise contract! cid:${c.contractId.coid}"))
+          )
         )
-      )
 
-    val batchInsertContracts = BatchSql(
-      SQL_INSERT_CONTRACT,
-      namedContractParams.head,
-      namedContractParams.drop(1).toArray: _*)
+      val batchInsertContracts = BatchSql(
+        SQL_INSERT_CONTRACT,
+        namedContractParams.head,
+        namedContractParams.drop(1).toArray: _*)
 
-    val namedWitnessesParams = contracts
-      .flatMap(
-        c =>
-          c.witnesses.map(
-            w =>
-              Seq[NamedParameter](
-                "contract_id" -> c.contractId.coid,
-                "witness" -> w.underlyingString
-            ))
-      )
-      .toArray
+      batchInsertContracts.execute()
 
-    val batchInsertWitnesses = BatchSql(
-      SQL_INSERT_CONTRACT_WITNESS,
-      namedWitnessesParams.head,
-      namedWitnessesParams.drop(1).toArray: _*
-    )
+      val namedWitnessesParams = contracts
+        .flatMap(
+          c =>
+            c.witnesses.map(
+              w =>
+                Seq[NamedParameter](
+                  "contract_id" -> c.contractId.coid,
+                  "witness" -> w.underlyingString
+              ))
+        )
+        .toArray
 
-    batchInsertContracts.execute()
-    batchInsertWitnesses.execute()
+      if (!namedWitnessesParams.isEmpty) {
+        val batchInsertWitnesses = BatchSql(
+          SQL_INSERT_CONTRACT_WITNESS,
+          namedWitnessesParams.head,
+          namedWitnessesParams.drop(1).toArray: _*
+        )
+        batchInsertWitnesses.execute()
+      }
+    }
     ()
   }
 
@@ -279,51 +287,62 @@ private class PostgresLedgerDao(
           )
         }
 
-        val disclosureParams = explicitDisclosure.flatMap {
-          case (eventId, parties) =>
-            parties.map(
-              p =>
-                Seq[NamedParameter](
-                  "transaction_id" -> transactionId,
-                  "event_id" -> eventId,
-                  "party" -> p
+        try {
+          SQL_INSERT_TRANSACTION
+            .on(
+              "ledger_offset" -> offset,
+              "transaction_id" -> transactionId,
+              "command_id" -> commandId,
+              "application_id" -> applicationId,
+              "submitter" -> submitter,
+              "workflow_id" -> workflowId,
+              "effective_at" -> ledgerEffectiveTime,
+              "recorded_at" -> recordedAt,
+              "transaction" -> transactionSerializer
+                .serialiseTransaction(transaction)
+                .getOrElse(sys.error(s"failed to serialise transaction! trId: ${transactionId}"))
+            )
+            .execute()
+
+          val disclosureParams = explicitDisclosure.flatMap {
+            case (eventId, parties) =>
+              parties.map(
+                p =>
+                  Seq[NamedParameter](
+                    "transaction_id" -> transactionId,
+                    "event_id" -> eventId,
+                    "party" -> p
+                ))
+          }
+          if (!disclosureParams.isEmpty) {
+            val batchInsertDisclosures =
+              BatchSql(
+                SQL_BATCH_INSERT_DISCLOSURES,
+                disclosureParams.head,
+                disclosureParams.drop(1).toArray: _*)
+            batchInsertDisclosures.execute()
+          }
+
+          updateActiveContractSet(offset, tx).flatMap { rejectionReason =>
+            // we need to rollback the existing sql transaction
+            conn.rollback()
+            insertEntry(
+              Rejection(
+                recordedAt,
+                commandId,
+                applicationId,
+                submitter,
+                rejectionReason
               ))
-        }
-
-        val batchInsertDisclosures =
-          BatchSql(
-            SQL_BATCH_INSERT_DISCLOSURES,
-            disclosureParams.head,
-            disclosureParams.drop(1).toArray: _*)
-
-        SQL_INSERT_TRANSACTION
-          .on(
-            "ledger_offset" -> offset,
-            "transaction_id" -> transactionId,
-            "command_id" -> commandId,
-            "application_id" -> applicationId,
-            "submitter" -> submitter,
-            "workflow_id" -> workflowId,
-            "effective_at" -> ledgerEffectiveTime,
-            "recorded_at" -> recordedAt,
-            "transaction" -> transactionSerializer
-              .serialiseTransaction(transaction)
-              .getOrElse(sys.error(s"failed to serialise transaction! trId: ${transactionId}"))
-          )
-          .execute()
-        batchInsertDisclosures.execute()
-
-        updateActiveContractSet(offset, tx).flatMap { rejectionReason =>
-          // we need to rollback the existing sql transaction
-          conn.rollback()
-          insertEntry(
-            Rejection(
-              recordedAt,
-              commandId,
-              applicationId,
-              submitter,
-              rejectionReason
-            ))
+          }
+        } catch {
+          case NonFatal(e) if (e.getMessage.contains("duplicate key")) =>
+            logger.warn(
+              "Ignoring duplicate submission for applicationId {}, commandId {}",
+              tx.applicationId: Any,
+              tx.commandId)
+            conn.rollback()
+            None
         }
 
       case Rejection(recordTime, commandId, applicationId, submitter, rejectionReason) =>

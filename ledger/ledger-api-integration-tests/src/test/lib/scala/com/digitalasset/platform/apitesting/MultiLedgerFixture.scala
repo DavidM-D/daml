@@ -5,6 +5,7 @@ package com.digitalasset.platform.apitesting
 
 import com.digitalasset.ledger.api.testing.utils.Resource
 import com.digitalasset.platform.PlatformApplications
+import com.digitalasset.platform.apitesting.LedgerFactories.SandboxStore
 import com.digitalasset.platform.esf.TestExecutionSequencerFactory
 import org.scalatest.AsyncTestSuite
 
@@ -28,8 +29,10 @@ trait MultiLedgerFixture
       index: Int,
       fixtureId: LedgerBackend): Resource[LedgerContext] = {
     fixtureId match {
-      case LedgerBackend.Sandbox =>
-        LedgerFactories.createSandboxResource(config)
+      case LedgerBackend.SandboxInMemory =>
+        LedgerFactories.createSandboxResource(config, SandboxStore.InMemory)
+      case LedgerBackend.SandboxSql =>
+        LedgerFactories.createSandboxResource(config, SandboxStore.Postgres)
     }
   }
 }

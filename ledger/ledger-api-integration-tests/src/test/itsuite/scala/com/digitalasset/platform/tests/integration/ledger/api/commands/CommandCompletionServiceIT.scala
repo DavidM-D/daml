@@ -6,24 +6,15 @@ package com.digitalasset.platform.tests.integration.ledger.api.commands
 import akka.NotUsed
 import akka.stream.scaladsl.{Sink, Source}
 import com.digitalasset.ledger.api.testing.utils.MockMessages.{applicationId, party}
-import com.digitalasset.ledger.api.testing.utils.{
-  AkkaBeforeAndAfterAll,
-  SuiteResourceManagementAroundAll
-}
+import com.digitalasset.ledger.api.testing.utils.{AkkaBeforeAndAfterAll, SuiteResourceManagementAroundAll}
 import com.digitalasset.ledger.api.v1.command_completion_service.CommandCompletionServiceGrpc.CommandCompletionService
-import com.digitalasset.ledger.api.v1.command_completion_service.{
-  Checkpoint,
-  CompletionStreamRequest
-}
+import com.digitalasset.ledger.api.v1.command_completion_service.{Checkpoint, CompletionStreamRequest}
 import com.digitalasset.ledger.api.v1.completion.Completion
 import com.digitalasset.ledger.api.v1.ledger_offset.LedgerOffset
 import com.digitalasset.ledger.api.v1.ledger_offset.LedgerOffset.LedgerBoundary.LEDGER_BEGIN
 import com.digitalasset.ledger.api.v1.ledger_offset.LedgerOffset.Value.Boundary
 import com.digitalasset.ledger.client.services.commands.CompletionStreamElement.CheckpointElement
-import com.digitalasset.ledger.client.services.commands.{
-  CommandCompletionSource,
-  CompletionStreamElement
-}
+import com.digitalasset.ledger.client.services.commands.{CommandCompletionSource, CompletionStreamElement}
 import com.digitalasset.platform.apitesting.LedgerContextExtensions._
 import com.digitalasset.platform.apitesting.MultiLedgerFixture
 import com.digitalasset.platform.services.time.TimeProviderType.WallClock
@@ -35,18 +26,18 @@ import scala.concurrent.duration._
 
 @SuppressWarnings(Array("org.wartremover.warts.Any"))
 class CommandCompletionServiceIT
-    extends AsyncWordSpec
+  extends AsyncWordSpec
     with AkkaBeforeAndAfterAll
     with Matchers
     with MultiLedgerFixture
     with SuiteResourceManagementAroundAll {
 
   private def completionSource(
-      completionService: CommandCompletionService,
-      ledgerId: String,
-      applicationId: String,
-      parties: Seq[String],
-      offset: LedgerOffset): Source[CompletionStreamElement, NotUsed] =
+                                completionService: CommandCompletionService,
+                                ledgerId: String,
+                                applicationId: String,
+                                parties: Seq[String],
+                                offset: LedgerOffset): Source[CompletionStreamElement, NotUsed] =
     CommandCompletionSource(
       CompletionStreamRequest(ledgerId, applicationId, parties, Some(offset)),
       completionService.completionStream)
