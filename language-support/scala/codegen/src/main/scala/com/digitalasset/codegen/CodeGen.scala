@@ -4,19 +4,24 @@
 package com.digitalasset.codegen
 
 import com.digitalasset.codegen.types.Namespace
-import com.digitalasset.daml.lf.iface, iface.{Type => _, _}
-import com.digitalasset.daml.lf.iface.reader.InterfaceType
+import com.digitalasset.daml.lf.{data, iface}
+import iface.{Type => _, _}
+import com.digitalasset.daml.lf.iface.reader.{Errors, Interface, InterfaceReader, InterfaceType}
 import java.io._
 import java.net.URL
 import java.nio.file.Files
+import java.util.zip.ZipFile
 
-import scala.collection.breakOut
+import scala.collection.{breakOut, immutable}
 import com.digitalasset.codegen.dependencygraph._
 import com.digitalasset.codegen.exception.PackageInterfaceException
+import com.digitalasset.daml.lf.archive.{DarReader, DarReaderWithVersion, LanguageMajorVersion}
 import com.digitalasset.daml.lf.data.ImmArray.ImmArraySeq
+import com.digitalasset.daml.lf.data.Ref
 import lf.{DefTemplateWithRecord, LFUtil, ScopedDataType}
-import com.digitalasset.daml_lf.DamlLf
+import com.digitalasset.daml_lf.{DamlLf, DamlLf1}
 import com.digitalasset.daml.lf.data.Ref._
+import com.digitalasset.daml.lf.iface.reader.Errors.ErrorLoc
 import scalaz._
 import scalaz.std.tuple._
 import scalaz.std.list._
@@ -27,7 +32,24 @@ import scalaz.syntax.std.option._
 import scalaz.syntax.bind._
 import scalaz.syntax.traverse1._
 
+import scala.util.Try
+
 object CodeGen {
+
+  val SupportedLanguageVersions: Set[LanguageMajorVersion] = Set(LanguageMajorVersion.V1)
+
+  sealed abstract class SupportedFileType(fileExtension: String) extends Serializable with Product {
+    def matchesFileExtension(f: File): Boolean = f.getName.endsWith(fileExtension)
+  }
+  final case object Dar extends SupportedFileType(".dar")
+  final case object Dalf extends SupportedFileType(".dalf")
+
+  def supportedFileType(f: File): String \/ SupportedFileType = {
+    if (Dar.matchesFileExtension(f)) \/.right(Dar)
+    else if (Dalf.matchesFileExtension(f)) \/.right(Dalf)
+    else \/.left(s"Unsupported file extension: ${f.getAbsolutePath}")
+  }
+
   sealed abstract class Mode extends Serializable with Product { self =>
     type Dialect <: Util { type Interface <: self.Interface }
     type InterfaceElement
@@ -50,30 +72,31 @@ object CodeGen {
     type Dialect = LFUtil
     type InterfaceElement = reader.Interface
     type Interface = lf.EnvironmentInterface
-    private[CodeGen] val Dialect = LFUtil.apply _
+    private[CodeGen] val Dialect = LFUtil.apply
+
+    private[CodeGen] def decodeInterfaceFromFile(f: File): String \/ Seq[InterfaceElement] = {
+      println(s"Codegen decoding file: ${f.getAbsolutePath: String}")
+      supportedFileType(f).map {
+        case Dar => ???
+
+        case Dalf => ???
+      }
+    }
 
     private[CodeGen] override def decodeInterfaceFromStream(
-        format: PackageFormat,
         bis: BufferedInputStream): String \/ InterfaceElement =
-      format match {
-        case PackageFormat.SDaml =>
-          \/.left("sdaml v1 not supported")
-        case PackageFormat.SDamlV2 =>
-          \/.left("sdaml v2 not supported")
-        case PackageFormat.DamlLF =>
-          \/.fromTryCatchNonFatal {
-            val (errors, out) = reader.Interface.read(
-              DamlLf.Archive.parser().parseFrom(bis)
-            )
-            println(
-              s"Codegen decoded archive with Package ID: ${out.packageId.underlyingString: String}")
-            if (!errors.empty)
-              \/.left(
-                ("Errors reading LF archive:\n" +: InterfaceReader.InterfaceReaderError.treeReport(
-                  errors)).toString)
-            else \/.right(out)
-          }.leftMap(_.getLocalizedMessage).join
-      }
+      \/.fromTryCatchNonFatal {
+        val (errors, out) = reader.Interface.read(DamlLf.Archive.parser().parseFrom(bis))
+        println(
+          s"Codegen decoded archive with Package ID: ${out.packageId.underlyingString: String}")
+        if (!errors.empty)
+          \/.left("Errors reading LF archive:\n" +: formatErrors(errors))
+        else \/.right(out)
+      }.leftMap(_.getLocalizedMessage).join
+
+    private[CodeGen] def formatErrors(
+        errors: Errors[ErrorLoc, InterfaceReader.InvalidDataTypeDefinition]): String =
+      InterfaceReader.InterfaceReaderError.treeReport(errors).toString
 
     private[CodeGen] override def combineInterfaces(
         leader: InterfaceElement,
@@ -86,7 +109,6 @@ object CodeGen {
         case _ => false
       }
     }
-
   }
 
   val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
@@ -95,7 +117,7 @@ object CodeGen {
   import Util.{FilePlan, WriteParams, partitionEithers}
 
   /*
-   * Given an DAML package (in sdaml format), a package name and an output
+   * Given an DAML package (in dalf format), a package name and an output
    * directory, this function writes a bunch of generated .scala files
    * to 'outputDir' that mirror the namespace of the DAML package.
    *
@@ -109,13 +131,13 @@ object CodeGen {
     cause = "either decoding a package from a file or extracting" +
       " the package interface failed")
   def generateCode(
-      sdamlFile: File,
+      dalfFile: File,
       otherDalfInputs: Seq[URL],
       packageName: String,
       outputDir: File,
       mode: Mode): Unit = {
     val errorOrRun = for {
-      interface <- decodePackageFromFile(sdamlFile, mode)
+      interface <- decodePackageFromFile(dalfFile, mode)
       dependencies <- decodePackagesFromURLs(otherDalfInputs, mode)
       combined = mode.combineInterfaces(interface, dependencies)
     } yield packageInterfaceToScalaCode(mode.Dialect(packageName, combined, outputDir))
@@ -123,14 +145,42 @@ object CodeGen {
     errorOrRun fold (e => throw PackageInterfaceException(e), identity)
   }
 
-  private def decodePackageFromFile(
-      sdamlFile: File,
-      mode: Mode): String \/ mode.InterfaceElement = {
-    val is = Files.newInputStream(sdamlFile.toPath)
-    println(s"Decoding ${sdamlFile.toPath}")
-    try decodePackageFrom(is, mode)
-    finally is.close() // close is in case of fatal throwables
+  type PayloadWithVersion = ((PackageId, DamlLf.ArchivePayload), LanguageMajorVersion)
+
+  def readInterfaces(darFile: File) = {
+    for {
+      zipFile <- Try(new ZipFile(darFile)) // TODO(Leo): use bracket
+      payloads <- DarReaderWithVersion.readArchive(zipFile)
+      _ <- Try(zipFile.close())
+      (supported, unsupported) <- Try(splitPayloads(SupportedLanguageVersions)(payloads))
+      _ = reportUnsupportedPayloads(unsupported)
+      packages = supported.map(getPackage)
+      interfaces <- readInterfaces(packages)
+    } yield interfaces
   }
+
+  private def splitPayloads(supported: Set[LanguageMajorVersion])(
+      payloads: List[PayloadWithVersion]): (List[PayloadWithVersion], List[PayloadWithVersion]) =
+    payloads.partition { case ((_, _), v) => supported.contains(v) }
+
+  private def reportUnsupportedPayloads(payloads: List[PayloadWithVersion]): Unit = {
+    payloads.foreach {
+      case ((packageId, _), version) =>
+        println(
+          s"WARNING: Skipping unsupported ArchivePayload, packageId: ${packageId.underlyingString: String}, version: ${version.toString}")
+    }
+  }
+
+  private def getPackage(payloadWithVersion: PayloadWithVersion): (PackageId, DamlLf1.Package) = {
+    val ((packageId, payload), _) = payloadWithVersion
+    (packageId, payload.getDamlLf1)
+  }
+
+  private def readInterfaces(lfPackages: List[(PackageId, DamlLf1.Package)])
+    : Seq[(Errors[ErrorLoc, InterfaceReader.InvalidDataTypeDefinition], Interface)] =
+    lfPackages.map {
+      case (packageId, pkg) => reader.Interface.read(packageId, pkg)
+    }
 
   private def decodePackagesFromURLs(
       urls: Seq[URL],
@@ -138,47 +188,11 @@ object CodeGen {
     urls
       .map { url =>
         val is = url.openStream()
-        try decodePackageFrom(is, mode)
+        try mode.decodeInterfaceFromStream(new BufferedInputStream(is))
         finally is.close()
       }
       .toList
       .sequenceU
-
-  @throws[FileNotFoundException](cause = "input file not found")
-  @throws[SecurityException](cause = "input file not readable")
-  private def decodePackageFrom(is: InputStream, mode: Mode): String \/ mode.InterfaceElement = {
-    val bis = new BufferedInputStream(is)
-
-    for {
-      format <- detectPackageFormat(bis)
-      result <- mode.decodeInterfaceFromStream(format, bis)
-    } yield result
-  }
-
-  sealed trait PackageFormat
-  object PackageFormat {
-    case object SDaml extends PackageFormat
-    case object SDamlV2 extends PackageFormat
-    case object DamlLF extends PackageFormat
-  }
-
-  private def detectPackageFormat(is: InputStream): String \/ PackageFormat = {
-    if (is.markSupported()) {
-      is.mark(1024)
-      val buf = Array.ofDim[Byte](11)
-      is.read(buf)
-      is.reset()
-      \/.right(
-        if (buf.startsWith("("))
-          if (buf.startsWith("(pkge\"v2.0\"")) PackageFormat.SDamlV2
-          else PackageFormat.SDaml
-        else
-          PackageFormat.DamlLF
-      )
-    } else {
-      \/.left("input stream doesn't support mark")
-    }
-  }
 
   private def packageInterfaceToScalaCode(util: Util): Unit = {
     val interface = util.iface
