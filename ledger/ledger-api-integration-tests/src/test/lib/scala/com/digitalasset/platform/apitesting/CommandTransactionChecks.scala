@@ -251,7 +251,7 @@ abstract class CommandTransactionChecks(instanceId: String)
       }
 
       /*
-       * TODO(FM) for absolutely misterious reasons this times out, but the equivalent one in TransactionServiceIT
+       * TODO(FM) for absolutely mysterious reasons this times out, but the equivalent one in TransactionServiceIT
        * does not. find out why. this seems to be quadratic
       "accept huge submissions with a large number of commands" in allFixtures { c =>
         val commandId = cid("Huge composite command")
@@ -602,7 +602,6 @@ abstract class CommandTransactionChecks(instanceId: String)
           // both existing lookups...
           lookupNone = Value(Value.Sum.Optional(Optional(None)))
           lookupSome = (cid: String) => Value(Value.Sum.Optional(Optional(Some(cid.asContractId))))
-          /*
           _ <- failingExercise(
             ctx,
             "CK-test-bob-unauthorized-1",
@@ -645,6 +644,7 @@ abstract class CommandTransactionChecks(instanceId: String)
                 Record(fields = List(
                   RecordField(value = textKeyValue(alice, key)),
                   RecordField(value = lookupSome(cid1.contractId)))))))
+          /*
           // successful fetch
           _ <- simpleExercise(
             ctx,
