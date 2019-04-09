@@ -67,9 +67,9 @@ class CommandTransactionChecks(
     getMaterializer: => ActorMaterializer,
     getEsf: => ExecutionSequencerFactory)
     extends WordSpec
-    with Matchers
-    with OptionValues
-    with ScalaFutures {
+        with Matchers
+        with OptionValues
+        with ScalaFutures {
 
   private implicit lazy val mat: ActorMaterializer = getMaterializer
   private implicit lazy val esf: ExecutionSequencerFactory = getEsf
@@ -438,25 +438,25 @@ class CommandTransactionChecks(
           // only compare the field values since the server currently does not return the
           // record identifier or labels when the request does not set verbose=true .
           create.getCreateArguments.fields.map(_.value) shouldEqual
-            createArguments.fields.map(_.value)
+              createArguments.fields.map(_.value)
         })(_ => succeed)
       }
 
       "having many transactions all of them has a unique event id" in {
         val eventIdsF = transactionClient
-          .getTransactions(
-            (LedgerOffset(LedgerOffset.Value.Boundary(LedgerOffset.LedgerBoundary.LEDGER_BEGIN))),
-            Some(LedgerOffset(LedgerOffset.Value.Boundary(LedgerOffset.LedgerBoundary.LEDGER_END))),
-            getAllContracts
-          )
-          .map(_.events
-            .map(_.event)
-            .collect {
-              case Archived(ArchivedEvent(eventId, _, _, _)) => eventId
-              case Created(CreatedEvent(eventId, _, _, _, _)) => eventId
-            })
-          .takeWithin(5.seconds) //TODO: work around as ledger end is broken. see DEL-3151
-          .runWith(Sink.seq)
+            .getTransactions(
+              (LedgerOffset(LedgerOffset.Value.Boundary(LedgerOffset.LedgerBoundary.LEDGER_BEGIN))),
+              Some(LedgerOffset(LedgerOffset.Value.Boundary(LedgerOffset.LedgerBoundary.LEDGER_END))),
+              getAllContracts
+            )
+            .map(_.events
+                .map(_.event)
+                .collect {
+                  case Archived(ArchivedEvent(eventId, _, _, _)) => eventId
+                  case Created(CreatedEvent(eventId, _, _, _, _)) => eventId
+                })
+            .takeWithin(5.seconds) //TODO: work around as ledger end is broken. see DEL-3151
+            .runWith(Sink.seq)
 
         whenReady(eventIdsF) { eventIds =>
           val eventIdList = eventIds.flatten
@@ -515,12 +515,15 @@ class CommandTransactionChecks(
         // TODO currently we run multiple suites with the same sandbox, therefore we must generate
         // unique keys. This is not so great though, it'd be better to have a clean environment.
         val keyPrefix = UUID.randomUUID.toString
+
         def textKeyRecord(p: String, k: String): Record =
           Record(
             fields =
-              List(RecordField(value = p.asParty), RecordField(value = s"$k-$keyPrefix".asText)))
+                List(RecordField(value = p.asParty), RecordField(value = s"$k-$keyPrefix".asText)))
+
         def textKeyValue(p: String, k: String): Value =
           Value(Value.Sum.Record(textKeyRecord(p, k)))
+
         val key = "some-key"
         val alice = "Alice"
         val bob = "Bob"
@@ -560,8 +563,10 @@ class CommandTransactionChecks(
         // unauthorized lookups are not OK
         // both existing lookups...
         val lookupNone: Value = Value(Value.Sum.Optional(Optional(None)))
+
         def lookupSome(cid: String): Value =
           Value(Value.Sum.Optional(Optional(Some(cid.asContractId))))
+
         whenReady(
           failingExercise(
             "CK-test-bob-unauthorized-1",
@@ -700,14 +705,14 @@ class CommandTransactionChecks(
 
   private def createAgreementFactory(receiver: String, giver: String, commandId: String) = {
     submitRequestWithId(commandId)
-      .update(
-        _.commands.commands := List(
-          Command(
-            create(
-              templateIds.agreementFactory,
-              List(receiver -> receiver.asParty, giver -> giver.asParty)))),
-        _.commands.party := giver
-      )
+        .update(
+          _.commands.commands := List(
+            Command(
+              create(
+                templateIds.agreementFactory,
+                List(receiver -> receiver.asParty, giver -> giver.asParty)))),
+          _.commands.party := giver
+        )
   }
 
   // Create a template instance and return the resulting create event.
@@ -721,11 +726,11 @@ class CommandTransactionChecks(
     for {
       tx <- submitAndListenForSingleResultOfCommand(
         submitRequestWithId(cid(commandId))
-          .update(
-            _.commands.commands :=
-              List(CreateCommand(Some(template), Some(arg)).wrap),
-            _.commands.party := submitter
-          ),
+            .update(
+              _.commands.commands :=
+                  List(CreateCommand(Some(template), Some(arg)).wrap),
+              _.commands.party := submitter
+            ),
         TransactionFilter(Map(listener -> Filters.defaultInstance))
       )
     } yield {
@@ -752,11 +757,11 @@ class CommandTransactionChecks(
   ): Future[Assertion] =
     assertCommandFailsWithCode(
       submitRequestWithId(cid(commandId))
-        .update(
-          _.commands.commands :=
-            List(CreateCommand(Some(template), Some(arg)).wrap),
-          _.commands.party := submitter
-        ),
+          .update(
+            _.commands.commands :=
+                List(CreateCommand(Some(template), Some(arg)).wrap),
+            _.commands.party := submitter
+          ),
       code,
       pattern
     )
@@ -773,11 +778,11 @@ class CommandTransactionChecks(
   ): Future[TransactionTree] = {
     submitAndListenForSingleTreeResultOfCommand(
       submitRequestWithId(cid(commandId))
-        .update(
-          _.commands.commands :=
-            List(ExerciseCommand(Some(template), contractId, choice, Some(arg)).wrap),
-          _.commands.party := submitter
-        ),
+          .update(
+            _.commands.commands :=
+                List(ExerciseCommand(Some(template), contractId, choice, Some(arg)).wrap),
+            _.commands.party := submitter
+          ),
       TransactionFilter(Map(listener -> Filters.defaultInstance)),
       false
     )
@@ -793,11 +798,11 @@ class CommandTransactionChecks(
     for {
       tx <- submitAndListenForSingleResultOfCommand(
         submitRequestWithId(cid(commandId))
-          .update(
-            _.commands.commands :=
-              List(CreateCommand(Some(template), Some(arg)).wrap),
-            _.commands.party := submitter
-          ),
+            .update(
+              _.commands.commands :=
+                  List(CreateCommand(Some(template), Some(arg)).wrap),
+              _.commands.party := submitter
+            ),
         TransactionFilter(Map(listener -> Filters.defaultInstance))
       )
     } yield {
@@ -824,11 +829,11 @@ class CommandTransactionChecks(
   ): Future[Seq[Transaction]] = {
     submitAndListenForTransactionResultOfCommand(
       submitRequestWithId(cid(commandId))
-        .update(
-          _.commands.commands :=
-            List(ExerciseCommand(Some(template), contractId, choice, Some(arg)).wrap),
-          _.commands.party := submitter
-        ),
+          .update(
+            _.commands.commands :=
+                List(ExerciseCommand(Some(template), contractId, choice, Some(arg)).wrap),
+            _.commands.party := submitter
+          ),
       TransactionFilter(Map(listener -> Filters.defaultInstance)),
       false
     )
@@ -878,15 +883,15 @@ class CommandTransactionChecks(
       commandId: Option[String],
       txEndOffset: LedgerOffset): Future[immutable.Seq[Transaction]] = {
     transactionClient
-      .getTransactions(
-        txEndOffset,
-        None,
-        transactionFilter
-      )
-      .filter(x => commandId.fold(true)(cid => x.commandId == cid))
-      .take(1)
-      .takeWithin(3.seconds)
-      .runWith(Sink.seq)
+        .getTransactions(
+          txEndOffset,
+          None,
+          transactionFilter
+        )
+        .filter(x => commandId.fold(true)(cid => x.commandId == cid))
+        .take(1)
+        .takeWithin(3.seconds)
+        .runWith(Sink.seq)
   }
 
   // Exercise a choice and return all resulting create events.
@@ -913,11 +918,11 @@ class CommandTransactionChecks(
   ): Future[Assertion] =
     assertCommandFailsWithCode(
       submitRequestWithId(cid(commandId))
-        .update(
-          _.commands.commands :=
-            List(ExerciseCommand(Some(template), contractId, choice, Some(arg)).wrap),
-          _.commands.party := submitter
-        ),
+          .update(
+            _.commands.commands :=
+                List(ExerciseCommand(Some(template), contractId, choice, Some(arg)).wrap),
+            _.commands.party := submitter
+          ),
       code,
       pattern
     )
@@ -1006,16 +1011,16 @@ class CommandTransactionChecks(
       offset: LedgerOffset,
       commandIdToListenFor: String) = {
     newCommandClient(appId)
-      .completionSource(List(requestingParty), offset)
-      .collect {
-        case CompletionStreamElement.CompletionElement(completion)
+        .completionSource(List(requestingParty), offset)
+        .collect {
+          case CompletionStreamElement.CompletionElement(completion)
             if completion.commandId == commandIdToListenFor =>
-          completion
-      }
-      .take(1)
-      .takeWithin(3.seconds)
-      .runWith(Sink.seq)
-      .map(_.headOption)
+            completion
+        }
+        .take(1)
+        .takeWithin(3.seconds)
+        .runWith(Sink.seq)
+        .map(_.headOption)
   }
 
   private def requestToCallExerciseWithId(factoryContractId: String, commandId: String) = {
@@ -1077,48 +1082,48 @@ class CommandTransactionChecks(
 
   private def compositeCommandRelativeWithExercises(commandId: String) = {
     submitRequestWithId(commandId)
-      .update(
-        _.commands.commands := List(
-          Command(
-            Create(
-              CreateCommand(
+        .update(
+          _.commands.commands := List(
+            Command(
+              Create(
+                CreateCommand(
+                  Some(templateIds.dummyContractFactory),
+                  Some(List("operator" -> "party".asParty)
+                      .asRecordOf(templateIds.dummyContractFactory))))),
+            // The case we are testing is specifically for relative contract Ids
+            // referring back to the same transaction within a composite command
+            // this is why we must use these fixed contract ids.
+            Command(
+              Exercise(ExerciseCommand(
                 Some(templateIds.dummyContractFactory),
-                Some(List("operator" -> "party".asParty)
-                  .asRecordOf(templateIds.dummyContractFactory))))),
-          // The case we are testing is specifically for relative contract Ids
-          // referring back to the same transaction within a composite command
-          // this is why we must use these fixed contract ids.
-          Command(
-            Exercise(ExerciseCommand(
-              Some(templateIds.dummyContractFactory),
-              s"#/0<${templateIds.dummyContractFactory.moduleName}:${templateIds.dummyContractFactory.entityName}@${templateIds.dummyContractFactory.packageId}>",
-              "DummyContractFactoryCall",
-              Some(Value(Sum.Unit(Empty())))
-            ))),
-          Command(
-            Exercise(ExerciseCommand(
-              Some(templateIds.dummyContractFactory),
-              s"#/1<${templateIds.dummy.moduleName}:${templateIds.dummy.entityName}@${templateIds.dummy.packageId}>",
-              "Choice",
-              Some(Value(Sum.Unit(Empty())))
-            )))
+                s"#/0<${templateIds.dummyContractFactory.moduleName}:${templateIds.dummyContractFactory.entityName}@${templateIds.dummyContractFactory.packageId}>",
+                "DummyContractFactoryCall",
+                Some(Value(Sum.Unit(Empty())))
+              ))),
+            Command(
+              Exercise(ExerciseCommand(
+                Some(templateIds.dummyContractFactory),
+                s"#/1<${templateIds.dummy.moduleName}:${templateIds.dummy.entityName}@${templateIds.dummy.packageId}>",
+                "Choice",
+                Some(Value(Sum.Unit(Empty())))
+              )))
+          )
         )
-      )
   }
 
   private def paramShowcaseArgumentsToChoice1Argument(args: Record): Value =
     Value(
       Value.Sum.Record(
         args
-          .update(_.fields.modify { originalFields =>
-            originalFields.collect {
-              // prune "operator" -- we do not have it in the choice params
-              case original if original.label != "operator" =>
-                val newLabel = "new" + original.label.capitalize
-                RecordField(newLabel, original.value)
-            }
-          })
-          .update(_.recordId.set(templateIds.parameterShowcaseChoice1))))
+            .update(_.fields.modify { originalFields =>
+              originalFields.collect {
+                // prune "operator" -- we do not have it in the choice params
+                case original if original.label != "operator" =>
+                  val newLabel = "new" + original.label.capitalize
+                  RecordField(newLabel, original.value)
+              }
+            })
+            .update(_.recordId.set(templateIds.parameterShowcaseChoice1))))
 
   private def verifyParamShowcaseChoice(
       choice: String,
@@ -1140,7 +1145,7 @@ class CommandTransactionChecks(
         exerciseArg).wrap
       tx <- submitAndListenForSingleTreeResultOfCommand(
         submitRequestWithId(cid(s"Exercising with a multitiude of params ($choice, $lbl)"))
-          .update(_.commands.update(_.commands := List(exercise))),
+            .update(_.commands.update(_.commands := List(exercise))),
         getAllContracts,
         true
       )
@@ -1152,7 +1157,7 @@ class CommandTransactionChecks(
       // if verbose flag is off as prescribed
       // and these tests work with verbose=false requests
       val expectedExerciseFields =
-        removeLabels(exerciseArg.getRecord.fields)
+      removeLabels(exerciseArg.getRecord.fields)
       val expectedCreateFields =
         removeLabels(expectedCreateArg.fields)
 
@@ -1163,7 +1168,7 @@ class CommandTransactionChecks(
       // check that we have the create
       val create = getHead(createdEventsInTreeNodes(exercise.childEventIds.map(tx.eventsById)))
       create.getCreateArguments.fields shouldEqual expectedCreateFields
-//      expectedCreateFields
+      //      expectedCreateFields
     })(_ => succeed)
   }
 }
