@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory
 
 import scala.collection.immutable
 import scala.concurrent.Future
+import scala.util.Try
 import scala.util.control.NonFatal
 
 private class PostgresLedgerDao(
@@ -257,8 +258,10 @@ private class PostgresLedgerDao(
   override def storeLedgerEntry(
       offset: Long,
       newLedgerEnd: Long,
-      ledgerEntry: LedgerEntry): Future[Unit] = {
-    def insertEntry(le: LedgerEntry)(implicit conn: Connection): Option[Rejection] = le match {
+      ledgerEntry: LedgerEntry): Future[PersistenceResponse] = {
+    import PersistenceResponse._
+
+    def insertEntry(le: LedgerEntry)(implicit conn: Connection): PersistenceResponse = le match {
       case tx @ Transaction(
             commandId,
             transactionId,
@@ -287,7 +290,7 @@ private class PostgresLedgerDao(
           )
         }
 
-        try {
+        Try {
           SQL_INSERT_TRANSACTION
             .on(
               "ledger_offset" -> offset,
@@ -323,7 +326,7 @@ private class PostgresLedgerDao(
             batchInsertDisclosures.execute()
           }
 
-          updateActiveContractSet(offset, tx).flatMap { rejectionReason =>
+          updateActiveContractSet(offset, tx).fold[PersistenceResponse](Ok) { rejectionReason =>
             // we need to rollback the existing sql transaction
             conn.rollback()
             insertEntry(
@@ -335,15 +338,15 @@ private class PostgresLedgerDao(
                 rejectionReason
               ))
           }
-        } catch {
+        }.recover {
           case NonFatal(e) if (e.getMessage.contains("duplicate key")) =>
             logger.warn(
               "Ignoring duplicate submission for applicationId {}, commandId {}",
               tx.applicationId: Any,
               tx.commandId)
             conn.rollback()
-            None
-        }
+            Duplicate
+        }.get
 
       case Rejection(recordTime, commandId, applicationId, submitter, rejectionReason) =>
         val (rejectionDescription, rejectionType) = writeRejectionReason(rejectionReason)
@@ -358,19 +361,20 @@ private class PostgresLedgerDao(
             "rejection_type" -> rejectionType
           )
           .execute()
-        None
+        Ok
 
       case Checkpoint(recordedAt) =>
         SQL_INSERT_CHECKPOINT
           .on("ledger_offset" -> offset, "recorded_at" -> recordedAt)
           .execute()
-        None
+        Ok
     }
 
     dbDispatcher
       .executeSql { implicit conn =>
-        insertEntry(ledgerEntry)
+        val resp = insertEntry(ledgerEntry)
         updateParameter(LedgerEndKey, newLedgerEnd.toString)
+        resp
       }
   }
 

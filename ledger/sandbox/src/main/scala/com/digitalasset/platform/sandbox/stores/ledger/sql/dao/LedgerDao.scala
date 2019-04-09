@@ -34,6 +34,12 @@ object Contract {
 
 case class LedgerSnapshot(offset: Long, acs: Source[Contract, NotUsed])
 
+sealed abstract class PersistenceResponse extends Product with Serializable
+object PersistenceResponse {
+  case object Ok extends PersistenceResponse
+  case object Duplicate extends PersistenceResponse
+}
+
 trait LedgerDao {
 
   /** Looks up the ledger id */
@@ -59,9 +65,11 @@ trait LedgerDao {
     * @param offset the offset to look at
     * @return the LedgerEntry found, or throws an exception
     */
-  def lookupLedgerEntryAssert(offset: Long): Future[LedgerEntry] =
+  def lookupLedgerEntryAssert(offset: Long): Future[LedgerEntry] = {
+    println(s"reading record with offset: $offset")
     lookupLedgerEntry(offset).map(
       _.getOrElse(sys.error(s"ledger entry not found for offset: $offset")))(DirectExecutionContext)
+  }
 
   /**
     * Returns a snapshot of the ledger.
@@ -88,10 +96,14 @@ trait LedgerDao {
   /**
     * Stores a ledger entry. The ledger end gets updated as well in the same transaction.
     *
-    * @param offset the offset to store the ledger entry
+    * @param offset       the offset to store the ledger entry
     * @param newLedgerEnd the new ledger end, valid after this operation finishes
-    * @param ledgerEntry the LedgerEntry to be stored
+    * @param ledgerEntry  the LedgerEntry to be stored
     */
-  def storeLedgerEntry(offset: Long, newLedgerEnd: Long, ledgerEntry: LedgerEntry): Future[Unit]
+  //TODO change docs
+  def storeLedgerEntry(
+      offset: Long,
+      newLedgerEnd: Long,
+      ledgerEntry: LedgerEntry): Future[PersistenceResponse]
 
 }
