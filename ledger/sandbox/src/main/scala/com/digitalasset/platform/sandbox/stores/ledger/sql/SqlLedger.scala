@@ -182,7 +182,7 @@ private class SqlLedger(
           tx.submitter,
           tx.workflowId,
           tx.ledgerEffectiveTime,
-          tx.maximumRecordTime,
+          Instant.now(),
           mappedTx,
           mappedDisclosure
         )
