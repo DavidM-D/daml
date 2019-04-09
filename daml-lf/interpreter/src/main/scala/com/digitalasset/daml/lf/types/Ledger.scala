@@ -114,7 +114,10 @@ object Ledger {
           flags.dontDiscloseNonConsumingChoicesToObservers
       )
 
-    val default = projectToUniqueFlags(FeatureFlags.default)
+    val default = LedgerFeatureFlags(
+      dontDiscloseNonConsumingChoicesToObservers = true,
+      dontDivulgeContractIdsInCreateArguments = true
+    )
 
     def fromPackages(packages: Map[PackageId, Package]): Either[String, LedgerFeatureFlags] = {
       val flags = packages.values.toList
@@ -124,8 +127,14 @@ object Ledger {
         .distinct
       if (flags.size > 1)
         Left(s"Mixed occurence of ledger feature flags in loaded packages")
-      else
-        Right(flags.headOption.getOrElse(LedgerFeatureFlags.default))
+      else {
+        // NOTE(JM, #157): We disallow loading of packages with deprecated flag
+        // settings as these are no longer supported.
+        if (flags.headOption.fold(false)(_ != LedgerFeatureFlags.default))
+          Left(s"Deprecated ledger feature flag settings in loaded packages: ${flags.head}")
+        else
+          Right(LedgerFeatureFlags.default)
+      }
     }
   }
 
