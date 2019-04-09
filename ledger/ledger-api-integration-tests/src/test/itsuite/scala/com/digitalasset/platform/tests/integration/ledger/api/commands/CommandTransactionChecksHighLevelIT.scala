@@ -10,7 +10,7 @@ import io.grpc.StatusRuntimeException
 
 import scala.concurrent.Future
 
-class CommandTransactionChecksHighLevelIT extends CommandTransactionChecks("high level") {
+class CommandTransactionChecksHighLevelIT extends CommandTransactionChecks {
   private[this] def emptyToCompletion(
       commandId: String,
       emptyF: Future[Empty]): Future[Completion] =

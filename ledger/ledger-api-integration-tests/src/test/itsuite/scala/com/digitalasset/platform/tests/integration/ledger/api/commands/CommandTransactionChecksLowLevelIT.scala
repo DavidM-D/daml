@@ -8,7 +8,7 @@ import com.digitalasset.util.Ctx
 
 import scala.concurrent.Future
 
-class CommandTransactionChecksLowLevelIT extends CommandTransactionChecks("low level") {
+class CommandTransactionChecksLowLevelIT extends CommandTransactionChecks {
   override protected def submitCommand(
       ctx: LedgerContext,
       submitRequest: SubmitRequest): Future[Completion] = {
