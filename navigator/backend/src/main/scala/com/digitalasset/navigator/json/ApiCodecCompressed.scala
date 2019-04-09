@@ -3,7 +3,6 @@
 
 package com.digitalasset.navigator.json
 
-import com.digitalasset.daml.lf.data.UTF8
 import com.digitalasset.navigator.model.DamlLfIdentifier
 import com.digitalasset.navigator.{model => Model}
 import spray.json._
@@ -58,13 +57,8 @@ object ApiCodecCompressed {
   def apiRecordToJsValue(value: Model.ApiRecord): JsValue =
     JsObject(value.fields.map(f => f.label -> apiValueToJsValue(f.value)).toMap)
 
-  private[this] val fieldKey = "key"
-  private[this] val fieldValue = "value"
-
   def apiMapToJsValue(value: Model.ApiMap): JsValue =
-    JsArray(value.value.toVector.sortBy(_._1)(UTF8.ordering).map {
-      case (k, v) => JsObject(fieldKey -> JsString(k), fieldValue -> apiValueToJsValue(v))
-    })
+    JsObject(value.value.transform((_, v) => apiValueToJsValue(v)))
 
   // ------------------------------------------------------------------------------------------------------------------
   // Decoding - this needs access to DAML-LF types
@@ -94,8 +88,9 @@ object ApiCodecCompressed {
           case Some(_) => deserializationError(s"Can't read ${value.prettyPrint} as Optional")
           case None => deserializationError(s"Can't read ${value.prettyPrint} as Optional")
         }
-      case (JsArray(a), Model.DamlLfPrimType.Map) =>
-        Model.ApiMap(HashMap(a.map(jsValueToMapEntry(_, prim.typArgs.head, defs)): _*))
+      case (JsObject(a), Model.DamlLfPrimType.Map) =>
+        val entries = a.mapValues(jsValueToApiType(_, prim.typArgs.head, defs)).toList
+        Model.ApiMap(HashMap(entries: _*))
       case _ => deserializationError(s"Can't read ${value.prettyPrint} as $prim")
     }
   }
@@ -139,23 +134,6 @@ object ApiCodecCompressed {
 
       case _ => deserializationError(s"Can't read ${value.prettyPrint} as $dt")
     }
-  }
-
-  /** Deserialize a value, to a map entry give the type */
-  def jsValueToMapEntry(
-      value: JsValue,
-      typ: Model.DamlLfType,
-      defs: Model.DamlLfTypeLookup): (String, Model.ApiValue) = {
-    val translation = value match {
-      case JsObject(map) =>
-        for {
-          key <- map.get(fieldKey).collect { case JsString(s) => s }
-          value <- map.get(fieldValue).map(jsValueToApiType(_, typ, defs))
-        } yield key -> value
-      case _ => None
-    }
-
-    translation.getOrElse(deserializationError(s"Can't read ${value.prettyPrint} as a map entry"))
   }
 
   /** Deserialize a value, given the type */

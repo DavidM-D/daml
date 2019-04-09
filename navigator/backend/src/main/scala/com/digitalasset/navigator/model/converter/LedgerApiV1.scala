@@ -306,11 +306,8 @@ case object LedgerApiV1 {
         case _ => Left(GenericConversionError(s"Cannot read $list as $typ"))
       }
       values <- Converter.sequence(list.entries.map {
-        case entry @ V1.value.Map.Entry(optKey, optValue) =>
+        case entry @ V1.value.Map.Entry(key, optValue) =>
           for {
-            keyValue <- optKey.toRight(GenericConversionError(s"Field 'key' required in $entry"))
-            key <- keyValue.sum.text
-              .toRight(GenericConversionError(s"Cannot read $keyValue as Text"))
             valueValue <- optValue.toRight(
               GenericConversionError(s"Field 'value' required in $entry"))
             value <- readArgument(valueValue, elementType, ctx)
@@ -468,11 +465,7 @@ case object LedgerApiV1 {
       )
     } yield {
       V1.value.Map(values.map {
-        case (k, v) =>
-          V1.value.Map.Entry(
-            Some(V1.value.Value(V1.value.Value.Sum.Text(k))),
-            Some(v)
-          )
+        case (k, v) => V1.value.Map.Entry(k, Some(v))
       })
     }
   }

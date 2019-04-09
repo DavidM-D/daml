@@ -50,11 +50,11 @@ class MapsSpec
       """
         {
          "reference" : "Non-empty maps",
-         "map" : { "Map" : [ { "key" : "1", "value" : 1 },
-                             { "key" : "2", "value" : 2 },
-                             { "key" : "3", "value" : 3 },
-                             { "key" : "4", "value" : 4 },
-                             { "key" : "5", "value" : 5 } ] },
+         "map" : { "Map" : [ { "1" : 1 },
+                             { "2" : 2 },
+                             { "3" : 3 },
+                             { "4" : 4 },
+                             { "5" : 5 } ] },
          "deep_map" : { "Map" : [] },
          "party" : "Bob"
         }

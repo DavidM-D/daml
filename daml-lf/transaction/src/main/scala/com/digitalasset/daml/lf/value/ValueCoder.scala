@@ -271,14 +271,6 @@ object ValueCoder {
       protoValue0: proto.Value): Either[DecodeError, Value[Cid]] = {
     case class Err(msg: String) extends Throwable(null, null, true, false)
 
-    def decodeKey(key: proto.Value) =
-      key.getSumCase match {
-        case proto.Value.SumCase.TEXT =>
-          key.getText
-        case sumCase =>
-          throw Err(s"Map key must be of type Text, found $sumCase")
-      }
-
     def go(nesting: Int, protoValue: proto.Value): Value[Cid] = {
       if (nesting > MAXIMUM_NESTING) {
         throw Err(
@@ -360,7 +352,7 @@ object ValueCoder {
 
           case proto.Value.SumCase.MAP =>
             val entries = protoValue.getMap.getEntriesList.asScala
-              .map(entry => decodeKey(entry.getKey) -> go(newNesting, entry.getValue))
+              .map(entry => entry.getKey -> go(newNesting, entry.getValue))
 
             entries.map(_._1).groupBy(identity).collect {
               case (k, l) if l.length > 1 => throw Err(s"duplicate key $k")
@@ -476,7 +468,7 @@ object ValueCoder {
                 protoMap.addEntries(
                   proto.Map.Entry
                     .newBuilder()
-                    .setKey(proto.Value.newBuilder().setText(key))
+                    .setKey(key)
                     .setValue(go(newNesting, value))
                 )
             }

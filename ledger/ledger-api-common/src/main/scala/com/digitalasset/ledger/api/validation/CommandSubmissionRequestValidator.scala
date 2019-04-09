@@ -111,11 +111,6 @@ class CommandSubmissionRequestValidator(ledgerId: String, identifierResolver: Id
         } yield fields :+ domain.RecordField(label, value)
       })
 
-  def validateMapKey(value: Value): Either[StatusRuntimeException, String] = value.sum match {
-    case Sum.Text(text) => Right(text)
-    case _ => Left(invalidArgument(s"expected Text, found $value"))
-  }
-
   def validateValue(value: Value): Either[StatusRuntimeException, domain.Value] = value.sum match {
     case Sum.ContractId(cId) => Right(domain.Value.ContractIdValue(domain.ContractId(cId)))
     case Sum.Decimal(value) => Right(domain.Value.DecimalValue(value))
@@ -158,14 +153,12 @@ class CommandSubmissionRequestValidator(ledgerId: String, identifierResolver: Id
     case Sum.Map(m) =>
       m.entries
         .foldLeft[Either[StatusRuntimeException, Map[String, domain.Value]]](Right(Map.empty)) {
-          case (acc, ApiMap.Entry(key0, value0)) =>
+          case (acc, ApiMap.Entry(key, value0)) =>
             for {
               map <- acc
-              key <- requirePresence(key0, "key")
-              validatedKey <- validateMapKey(key)
               v <- requirePresence(value0, "value")
               validatedValue <- validateValue(v)
-            } yield map + (validatedKey -> validatedValue)
+            } yield map + (key -> validatedValue)
         }
         .map(domain.Value.MapValue)
     case Sum.Empty => Left(missingField("value"))

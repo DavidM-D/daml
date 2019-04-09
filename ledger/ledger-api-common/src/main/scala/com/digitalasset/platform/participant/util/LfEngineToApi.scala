@@ -105,8 +105,7 @@ object LfEngineToApi {
       case Lf.ValueMap(m) =>
         m.foldLeft[Either[String, List[ApiMap.Entry]]](Right(List.empty[ApiMap.Entry])) {
             case (Right(list), (k, v)) =>
-              val key = ApiValue(ApiValue.Sum.Text(k))
-              lfValueToApiValue(verbose, v).map(w => ApiMap.Entry(Some(key), Some(w)) :: list)
+              lfValueToApiValue(verbose, v).map(w => ApiMap.Entry(k, Some(w)) :: list)
             case (l, _) => l
           }
           .map(list => ApiValue(ApiValue.Sum.Map(ApiMap(list))))

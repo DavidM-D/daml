@@ -101,9 +101,8 @@ object LedgerValue {
     val entries = apiMap.entries.toList.traverseU {
       case api.value.Map.Entry(k, v) =>
         for {
-          key <- convertKeyMap(k)
           value <- v.fold(\/.right[String, LedgerValue](Empty))(_.sum.convert)
-        } yield key -> value
+        } yield k -> value
     }
     entries.map(s => ValueMap(HashMap(s: _*)))
   }
