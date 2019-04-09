@@ -107,6 +107,7 @@ class CommandTransactionChecks(
   import helpers._
 
   private val emptyRecordValue = Value(Value.Sum.Record(Record()))
+
   s"Command and Transaction Services $instanceId" when {
 
     "reading completions" should {
@@ -1045,7 +1046,6 @@ class CommandTransactionChecks(
 
   private def create(templateId: Identifier, arguments: immutable.Seq[(String, Value)]): Create = {
     Create(CreateCommand(Some(templateId), Some(arguments.asRecordOf(templateId))))
-
   }
 
   private def cid(commandId: String) = s"$commandId $instanceId"
